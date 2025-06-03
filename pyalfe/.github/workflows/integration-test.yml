@@ -1,0 +1,94 @@
+name: Integration Test
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  integration_test_linux:
+    name: integration-linux-cp${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: [ "3.11", "3.12"]
+
+    steps:
+      - uses: khan/pull-request-comment-trigger@master
+        id: check-comment
+        with:
+          trigger: 'please run integration'
+          reaction: rocket
+          prefix_only: true
+        env:
+          GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
+
+      - name: Get branch
+        if: steps.check-comment.outputs.triggered == 'true'
+        uses: xt0rted/pull-request-comment-branch@v2
+        id: comment-branch
+
+      - name: Checkout
+        if: steps.check-comment.outputs.triggered == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.comment-branch.outputs.head_ref }}
+
+      - name: Post response to GitHub PR
+        uses: mshick/add-pr-comment@v2
+        with:
+          message: |
+            Integration test started. Click [here](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) to see the status.
+
+      - name: Cache dependency binaries
+        if: steps.check-comment.outputs.triggered == 'true'
+        id: cache-bin
+        uses: actions/cache@v3
+        with:
+          key: bin
+          path: |
+            ~/.local/bin
+            ~/.cache/pip
+
+      - name: Setup Python
+        if: steps.check-comment.outputs.triggered == 'true'
+        uses: actions/setup-python@v3
+        with:
+          python-version: ${{ matrix.python-version}}
+
+      - name: Install test dependencies
+        if: steps.check-comment.outputs.triggered == 'true'
+        run: |
+          pip install pytest
+
+      - name: Install package
+        if: steps.check-comment.outputs.triggered == 'true'
+        run: |
+          pip install -e ".[ants]"
+
+      - name: Download models
+        if: steps.check-comment.outputs.triggered == 'true'
+        run: |
+          pyalfe download models
+
+      - name: Run tests
+        id: test
+        if: steps.check-comment.outputs.triggered == 'true'
+        run: |
+          pytest tests/integration
+
+      - name: React to comment with success
+        uses: dkershner6/reaction-action@v1
+        if: steps.test.outcome == 'success'
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commentId: ${{ github.event.comment.id }}
+          reaction: "+1"
+
+      - name: React to comment with failure
+        uses: dkershner6/reaction-action@v1
+        if: steps.test.outcome != 'success'
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commentId: ${{ github.event.comment.id }}
+          reaction: "-1"

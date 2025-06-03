@@ -1,6 +1,7 @@
 import shutil
 from abc import ABC, abstractmethod
 import re
+from collections import defaultdict
 
 import nibabel as nib
 import scipy.ndimage
@@ -315,6 +316,29 @@ class ImageProcessor(ABC):
         """
         pass
 
+    @staticmethod
+    @abstractmethod
+    def remap_labels(multi_label_image, label_map, output):
+        """Maps all the labels if a multi label image according to a label map
+        the `label_map` is a dictionary that maps input labels to output label.
+        For example, {1: 1, 2: 1, 3: 2} maps labels 1 and 2 in the input to
+        label 1 in the output and label 3 in the input to label 2 in the output.
+        Any other label is mapped to 0.
+
+        Parameters
+        ----------
+        multi_label_image: str or Path
+            The path to the multi label image
+        label_map: dict
+            The label map
+        output: str or Path
+            Path to the output image.
+
+        Returns
+        -------
+
+        """
+
 
 class Convert3DProcessor(ImageProcessor):
     @staticmethod
@@ -425,11 +449,38 @@ class Convert3DProcessor(ImageProcessor):
     @staticmethod
     def label_mask_comp(binary_image, output):
         c3d = C3D()
-        print(binary_image, output)    
         c3d.operand(binary_image).comp().out(output).run()
+
+    @staticmethod
+    def remap_labels(multi_label_image, label_map, output):
+        reverse_map = defaultdict(list)
+        for input_label, output_label in label_map.items():
+            reverse_map[output_label].append(input_label)
+
+        c3d = C3D()
+        c3d.operand(multi_label_image).assign('input')
+
+        first = True
+        for output_label, labels in reverse_map.items():
+            c3d.push('input').retain_labels(labels).thresh(
+                min(labels), max(labels), output_label, 0
+            )
+            if not first:
+                c3d.add()
+            else:
+                first = False
+
+        c3d.out(output)
+        c3d.run()
 
 
 class NilearnProcessor(ImageProcessor):
+    @staticmethod
+    def save(nib_image, file):
+        # np.int32 is problematic. 1s can turn into 0.9999999
+        nib_image.set_data_dtype(np.float32)
+        nib.save(nib_image, file)
+
     @staticmethod
     def _crop_img_to(image, slices, copy=True):
 
@@ -485,23 +536,21 @@ class NilearnProcessor(ImageProcessor):
             (data >= lower_bound) & (data <= upper_bound), inside_target, outside_target
         ).astype(np.int16)
         threshold_image = nib.Nifti1Image(threshold_data, nib_image.affine)
-        nib.save(threshold_image, output)
+        NilearnProcessor.save(threshold_image, output)
 
     @staticmethod
     def binarize(image, output):
         nib_image = nilearn.image.load_img(image)
-        nib.save(nilearn.image.binarize_img(nib_image), output)
+        NilearnProcessor.save(nilearn.image.binarize_img(nib_image), output)
 
     @staticmethod
     def mask(image, mask, output):
         nib_image = nilearn.image.load_img(image)
         nib_mask = nilearn.image.load_img(mask)
         masked_image = nib.Nifti1Image(
-            nib_image.get_fdata() * nib_mask.get_fdata(),
-            nib_image.affine,
-            dtype=np.int16,
+            nib_image.get_fdata() * nib_mask.get_fdata(), nib_image.affine
         )
-        nib.save(masked_image, output)
+        NilearnProcessor.save(masked_image, output)
 
     @staticmethod
     def largest_mask_comp(image, output):
@@ -517,9 +566,9 @@ class NilearnProcessor(ImageProcessor):
     def holefill(binary_image, output):
         nib_image = nilearn.image.load_img(binary_image)
         data = nib_image.get_fdata()
-        holefilled_data = scipy.ndimage.binary_fill_holes(data).astype('int16')
+        holefilled_data = scipy.ndimage.binary_fill_holes(data).astype('int32')
         holefilled_image = nib.Nifti1Image(holefilled_data, nib_image.affine)
-        nib.save(holefilled_image, output)
+        NilearnProcessor.save(holefilled_image, output)
 
     @staticmethod
     def reslice_to_ref(ref_image, moving_image, output):
@@ -545,7 +594,7 @@ class NilearnProcessor(ImageProcessor):
             target_shape=new_dims,
             interpolation='nearest',
         )
-        nib.save(resampled_image, output)
+        NilearnProcessor.save(resampled_image, output)
 
     @staticmethod
     def get_dims(image):
@@ -564,7 +613,7 @@ class NilearnProcessor(ImageProcessor):
         trimmed_largest_comp_image = NilearnProcessor.crop_img(
             largest_comp_image, pad=trim_margin_vec
         )
-        nib.save(trimmed_largest_comp_image, output)
+        NilearnProcessor.save(trimmed_largest_comp_image, output)
 
     @staticmethod
     def set_subtract(binary_image_1, binary_image_2, output):
@@ -573,7 +622,7 @@ class NilearnProcessor(ImageProcessor):
                 'np.maximum(img1 - img2, 0)', img1=binary_image_1, img2=binary_image_2
             )
         )
-        nib.save(subtract_image, output)
+        NilearnProcessor.save(subtract_image, output)
 
     @staticmethod
     def dilate(binary_image, rad, output):
@@ -588,7 +637,7 @@ class NilearnProcessor(ImageProcessor):
                 data, structure=np.ones(3 * (-2 * rad + 1,))
             ).astype(data.dtype)
         dilated_image = nib.Nifti1Image(dilated_data, nib_image.affine)
-        nib.save(dilated_image, output)
+        NilearnProcessor.save(dilated_image, output)
 
     @staticmethod
     def union(binary_image_1, binary_image_2, output):
@@ -597,7 +646,7 @@ class NilearnProcessor(ImageProcessor):
                 'img1 + img2', img1=binary_image_1, img2=binary_image_2
             )
         )
-        nib.save(union_image, output)
+        NilearnProcessor.save(union_image, output)
 
     @staticmethod
     def distance_transform(binary_image, output):
@@ -605,7 +654,7 @@ class NilearnProcessor(ImageProcessor):
         data = nib_image.get_fdata()
         dist_data = scipy.ndimage.distance_transform_edt(1 - data)
         dist_image = nib.Nifti1Image(dist_data, nib_image.affine)
-        nib.save(dist_image, output)
+        NilearnProcessor.save(dist_image, output)
 
     @staticmethod
     def label_mask_comp(binary_image, output):
@@ -619,4 +668,16 @@ class NilearnProcessor(ImageProcessor):
             sorted_comp_data[comp_image_data == label] = index + 1
 
         sorted_comp_image = nib.Nifti1Image(sorted_comp_data, nib_image.affine)
-        nib.save(sorted_comp_image, output)
+        NilearnProcessor.save(sorted_comp_image, output)
+
+    @staticmethod
+    def remap_labels(multi_label_image, label_map, output):
+        reverse_map = defaultdict(list)
+        for input_label, output_label in label_map.items():
+            reverse_map[output_label].append(input_label)
+
+        formula = '0'
+        for output_label, labels in reverse_map.items():
+            formula += f' + {output_label} * np.isin(img, {labels})'
+        remapped_image = nilearn.image.math_img(formula, img=multi_label_image)
+        NilearnProcessor.save(remapped_image, output)

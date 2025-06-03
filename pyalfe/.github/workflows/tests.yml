@@ -1,0 +1,45 @@
+name: Test
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  unit_test_linux:
+    name: linux-cp${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.11"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache dependency binaries
+        id: cache-bin
+        uses: actions/cache@v3
+        with:
+          key: bin
+          path: |
+            ~/.local/bin
+            ~/.cache/pip
+
+      - name: Setup Python
+        uses: actions/setup-python@v3
+        with:
+          python-version: ${{ matrix.python-version}}
+
+      - name: Install package
+        run: |
+          pip install -e ".[ants]"
+
+      - name: Install test dependencies
+        run: |
+          pip install pytest
+
+      - name: Run tests
+        run: |
+          pytest tests/unit

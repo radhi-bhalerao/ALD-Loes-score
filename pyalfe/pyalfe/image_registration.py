@@ -127,12 +127,11 @@ class GreedyRegistration(ImageRegistration):
 
     logger = logging.getLogger('GreedyRegistration')
 
-    def __init__(self, greedy_path='greedy', threads=16):
-        self.greedy_path = greedy_path
+    def __init__(self, threads=16):
         self.threads = threads
 
     def reslice(self, fixed, moving, registration_output, *transform):
-        cmd = Greedy(self.greedy_path)
+        cmd = Greedy()
         cmd = cmd.dim(3).threads(self.threads)
         cmd = cmd.reslice(*transform).reference(fixed)
         cmd = cmd.input_output(moving, registration_output)
@@ -141,17 +140,10 @@ class GreedyRegistration(ImageRegistration):
     def _register_affine(
         self, dof, fixed, moving, transform_output, init_transform, fast
     ):
-        cmd = Greedy(self.greedy_path)
-        if 'WNCC' in cmd.run():
-            metric = 'WNCC'
-        else:
-            metric = 'NCC'
-            self.logger.warning(
-                'Your version of greedy does not support weigthed normalized'
-                ' cross-correlation. Falling back to simple normalized'
-                ' cross-correlation. Consider upgrading greedy to the'
-                ' latest version.'
-            )
+        cmd = Greedy()
+
+        metric = 'WNCC'
+
         if init_transform:
             cmd.initialize_affine(init_transform)
         cmd = cmd.threads(self.threads).dim(3).affine().dof(dof)
@@ -193,7 +185,7 @@ class GreedyRegistration(ImageRegistration):
         if not os.path.exists(affine_transform):
             self.register_affine(fixed, moving, affine_transform, fast=False)
 
-        cmd = Greedy(self.greedy_path)
+        cmd = Greedy()
         cmd = cmd.dim(3).threads(self.threads).metric('NCC', 2)
         cmd = cmd.epsilon(0.5).num_iter(100, 50, 10)
         if affine_transform:
@@ -209,8 +201,8 @@ class AntsRegistration(ImageRegistration):
     """
 
     def reslice(self, fixed, moving, registration_output, *transform):
-        fixed_image = ants.image_read(fixed)
-        moving_image = ants.image_read(moving)
+        fixed_image = ants.image_read(str(fixed))
+        moving_image = ants.image_read(str(moving))
         output = ants.apply_transforms(fixed_image, moving_image, transform)
         ants.image_write(output, registration_output)
 
@@ -222,8 +214,8 @@ class AntsRegistration(ImageRegistration):
             moving_name = os.path.basename(moving).split('.')[0]
             transform_output = f'{moving_name}_to_{fixed_name}.mat'
         rigid_output = ants.registration(
-            ants.image_read(fixed),
-            ants.image_read(moving),
+            ants.image_read(str(fixed)),
+            ants.image_read(str(moving)),
             type_of_transform=type_of_transform,
             initial_transform=init_transform,
             reg_iterations=(100, 50, 10),
@@ -252,8 +244,8 @@ class AntsRegistration(ImageRegistration):
     def register_deformable(
         self, fixed, moving, transform_output=None, affine_transform=None
     ):
-        fixed_image = ants.image_read(fixed)
-        moving_image = ants.image_read(moving)
+        fixed_image = ants.image_read(str(fixed))
+        moving_image = ants.image_read(str(moving))
 
         if not affine_transform:
             fixed_name = os.path.basename(fixed).split('.')[0]

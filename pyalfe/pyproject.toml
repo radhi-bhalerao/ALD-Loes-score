@@ -6,24 +6,29 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyalfe"
-version = "0.0.1"
+version = "0.1.1"
 authors = [
     {name = "Reza Eghbali", email="eghbali68@gmail.com"},
     {email = "reza.eghbali@ucsf.edu"}
 ]
+description = "A pipeline for Automated Lesion and Feature Extraction from brain MRIs"
+readme = "README.md"
 dependencies = [
     "scipy",
     "StrEnum",
     "numpy",
     "Click",
-    "dependency_injector",
+    "huggingface_hub",
     "torch",
     "pandas",
+    "picsl_c3d",
+    "picsl_greedy===0.0.6",
+    "pybids",
     "nibabel",
     "nilearn",
     "matplotlib",
     "nnunet",
-    "pybids"
+    "nnunetv2",
 ]
 
 [project.license]
@@ -42,7 +47,14 @@ pyalfe = ["*.ini"]
 "pyalfe.templates" = ["oasis/*.nii.gz"]
 
 [tool.setuptools]
-packages = ["pyalfe"]
+packages = [
+    "pyalfe",
+    "pyalfe.interfaces",
+    "pyalfe.models",
+    "pyalfe.tasks",
+    "pyalfe.tools",
+    "pyalfe.utils"
+]
 
 [tool.ruff]
 line-length = 88
