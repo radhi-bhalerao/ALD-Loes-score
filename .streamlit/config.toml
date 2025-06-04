@@ -1,0 +1,28 @@
+[server]
+# Max size, in megabytes, for files uploaded with the file_uploader
+maxUploadSize = 1000
+
+# Max size, in megabytes, of messages that can be sent via the WebSocket connection
+maxMessageSize = 1000
+
+# Enable support for websocket compression (can help with large files)
+enableWebsocketCompression = true
+
+# Increase session timeout for long-running processes
+disconnectedSessionTTL = 600
+
+[browser]
+# Whether to send usage statistics to Streamlit
+gatherUsageStats = false
+
+[theme]
+# The preset Streamlit theme
+base = "light"
+
+[client]
+# Show full error details for debugging
+showErrorDetails = "full"
+
+[runner]
+# Handle script rerun requests immediately
+fastReruns = true
